@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dobot Magician 2D IK & FK Simulator</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --panel-border: #334155;
+            --accent-color: #38bdf8;
+            --accent-hover: #0284c7;
+            --success-color: #22c55e;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --canvas-bg: #0b1120;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+        }
+
+        header {
+            margin-bottom: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 1rem;
+        }
+
+        .header-title h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-title p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 1.5rem;
+            flex: 1;
+        }
+
+        @media (max-width: 1100px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .canvas-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .canvas-toolbar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .canvas-container {
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+            border: 1px solid var(--panel-border);
+            background: var(--canvas-bg);
+            cursor: crosshair;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Readout Panel Grid */
+        .readout-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .readout-item {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+        }
+
+        .readout-item.full-width {
+            grid-column: span 2;
+        }
+
+        .readout-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .readout-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-badge.reachable {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success-color);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-badge.unreachable {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger-color);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* End Effector Selector */
+        .btn-group {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .btn {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .btn:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .btn.active {
+            background: var(--accent-color);
+            color: #0f172a;
+            border-color: var(--accent-color);
+        }
+
+        .toggle-btn {
+            width: 100%;
+            padding: 0.6rem;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .toggle-btn.state-on {
+            background: rgba(34, 197, 94, 0.2);
+            border-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .preset-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        /* Slider Controls */
+        .control-group {
+            margin-bottom: 0.75rem;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-color);
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .checkbox-item input {
+            accent-color: var(--accent-color);
+            width: 16px;
+            height: 16px;
+        }
+
+        .code-note {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            background: rgba(15, 23, 42, 0.5);
+            padding: 0.75rem;
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-color);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-title">
+            <h1>🤖 Dobot Magician 2D Inverse Kinematics Simulator</h1>
+            <p>Interactive test harness for validating Unity C# IK & FK algorithms</p>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <!-- Canvas Visualizer Card -->
+        <div class="canvas-card">
+            <div class="canvas-toolbar">
+                <span>🖱️ Click & Drag the cursor inside canvas to test IK target</span>
+                <span>Arm Model: L1 = 135mm | L2 = 147mm | Offset = 60mm</span>
+            </div>
+            <div class="canvas-container">
+                <canvas id="simCanvas" width="900" height="620"></canvas>
+            </div>
+        </div>
+
+        <!-- Sidebar Controls & Readouts -->
+        <div class="side-panel">
+
+            <!-- Live Readout Panel -->
+            <div class="card">
+                <div class="card-title">
+                    <span>Live Kinematics Readout</span>
+                    <span id="statusBadge" class="status-badge reachable">REACHABLE</span>
+                </div>
+                <div class="readout-grid">
+                    <div class="readout-item">
+                        <div class="readout-label">Joint 2 (J2 / Shoulder)</div>
+                        <div class="readout-value" id="valJ2">0.00°</div>
+                    </div>
+                    <div class="readout-item">
+                        <div class="readout-label">Joint 3 (J3 / Elbow)</div>
+                        <div class="readout-value" id="valJ3">0.00°</div>
+                    </div>
+                    <div class="readout-item">
+                        <div class="readout-label">Target (X, Y)</div>
+                        <div class="readout-value" id="valTarget">(0.0, 0.0)</div>
+                    </div>
+                    <div class="readout-item">
+                        <div class="readout-label">FK Tip Position</div>
+                        <div class="readout-value" id="valTip">(0.0, 0.0)</div>
+                    </div>
+                    <div class="readout-item full-width">
+                        <div class="readout-label">Cosine Beta (Math Check)</div>
+                        <div class="readout-value" id="valCosBeta">0.000</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- End Effector Switcher -->
+            <div class="card">
+                <div class="card-title">End Effector Controls</div>
+                <div class="btn-group">
+                    <button class="btn active" onclick="setEffectorType('gripper')">Gripper</button>
+                    <button class="btn" onclick="setEffectorType('suction')">Suction</button>
+                    <button class="btn" onclick="setEffectorType('laser')">Laser</button>
+                </div>
+                <button id="effectorToggleBtn" class="toggle-btn" onclick="toggleEffectorState()">
+                    <span id="effectorStateIcon">🔓</span>
+                    <span id="effectorStateLabel">Gripper: OPEN</span>
+                </button>
+            </div>
+
+            <!-- Presets & Simulation Settings -->
+            <div class="card">
+                <div class="card-title">Pose Presets & Options</div>
+                <div class="preset-grid" style="margin-bottom: 1rem;">
+                    <button class="btn" onclick="setPresetTarget(200, 100)">Default Pose</button>
+                    <button class="btn" onclick="setPresetTarget(300, 20)">Max Reach</button>
+                    <button class="btn" onclick="setPresetTarget(100, 150)">High Angle</button>
+                    <button class="btn" onclick="setPresetTarget(400, 250)">Unreachable</button>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Interpolation Speed (Lerp)</span>
+                        <span id="lerpVal">0.15</span>
+                    </div>
+                    <input type="range" id="lerpSlider" min="0.05" max="1.0" step="0.05" value="0.15" oninput="updateLerpSpeed(this.value)">
+                </div>
+
+                <div class="checkbox-group">
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="chkWorkspace" checked onchange="toggleOption('showWorkspace', this.checked)">
+                        Show Reachable Workspace Arc
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="chkFKOverlay" checked onchange="toggleOption('showFKOverlay', this.checked)">
+                        Show FK Validation Ray & Distance
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="chkJointLabels" checked onchange="toggleOption('showJointLabels', this.checked)">
+                        Show Joint Angles & Labels
+                    </label>
+                </div>
+            </div>
+
+            <!-- Code Note -->
+            <div class="code-note">
+                <strong>Unity C# Porting Note:</strong><br>
+                The <code>solveIK()</code> and <code>solveFK()</code> functions in this file are written side-by-side with your C# MonoBehaviour signature for 1:1 translation.
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // =================================================================
+        // DOBOT MAGICIAN ARM CONSTANTS & PARAMETERS
+        // =================================================================
+        const REAR_ARM_LENGTH = 135.0;  // L1 (mm / units)
+        const FORE_ARM_LENGTH = 147.0;  // L2 (mm / units)
+        const BASE_OFFSET_RADIUS = 60.0; // Horizontal offset from base turret to shoulder pivot
+        const BASE_OFFSET_HEIGHT = 0.0;  // Vertical offset from base pedestal
+
+        // Reach limits from shoulder pivot (60, 0)
+        const R_MIN = Math.abs(REAR_ARM_LENGTH - FORE_ARM_LENGTH); // |135 - 147| = 12
+        const R_MAX = REAR_ARM_LENGTH + FORE_ARM_LENGTH;           // 135 + 147 = 282
+
+        // =================================================================
+        // STANDALONE INVERSE KINEMATICS (IK) FUNCTION
+        // (Clean 1:1 mirror of Unity C# TryInverseKinematics)
+        // =================================================================
+        /**
+         * Computes Joint 2 (Shoulder) and Joint 3 (Elbow) angles for target (x, y).
+         * 
+         * @param {number} targetX - Target X relative to base origin (0,0)
+         * @param {number} targetY - Target Y relative to base origin (0,0)
+         * @param {number} L1 - Rear arm length (135)
+         * @param {number} L2 - Forearm length (147)
+         * @param {number} baseOffsetRadius - Shoulder horizontal offset (60)
+         * @param {number} baseOffsetHeight - Shoulder vertical offset (0)
+         * @returns {{ reachable: boolean, j2Deg: number, j3Deg: number, j2Rad: number, j3Rad: number, cosBeta: number }}
+         */
+        function solveIK(targetX, targetY, L1 = REAR_ARM_LENGTH, L2 = FORE_ARM_LENGTH, baseOffsetRadius = BASE_OFFSET_RADIUS, baseOffsetHeight = BASE_OFFSET_HEIGHT) {
+            // Radial distance from base offset and vertical height relative to shoulder
+            const dr = targetX - baseOffsetRadius;
+            const dz = targetY - baseOffsetHeight;
+
+            const radiusSq = dr * dr + dz * dz;
+            const radius = Math.sqrt(radiusSq);
+            const gamma = Math.atan2(dz, dr);
+
+            // Cosine law for internal elbow angle (beta)
+            const cosBeta = (radiusSq - L1 * L1 - L2 * L2) / (-2.0 * L1 * L2);
+
+            // Check if target is out of reach
+            if (cosBeta < -1.0 || cosBeta > 1.0) {
+                return {
+                    reachable: false,
+                    j2Deg: 0,
+                    j3Deg: 0,
+                    j2Rad: 0,
+                    j3Rad: 0,
+                    cosBeta: cosBeta,
+                    radius: radius
+                };
+            }
+
+            const beta = Math.acos(cosBeta);
+            // Shoulder internal angle (alpha) using sine law
+            const alpha = radius > 0.0 ? Math.asin(Math.min(Math.max((L2 * Math.sin(beta)) / radius, -1.0), 1.0)) : 0.0;
+
+            // Joint angles in radians
+            const j2Rad = (Math.PI / 2.0) - alpha - gamma;
+            const j3Rad = Math.PI - beta - alpha - gamma;
+
+            return {
+                reachable: true,
+                j2Deg: j2Rad * (180.0 / Math.PI),
+                j3Deg: j3Rad * (180.0 / Math.PI),
+                j2Rad: j2Rad,
+                j3Rad: j3Rad,
+                cosBeta: cosBeta,
+                radius: radius
+            };
+        }
+
+        // =================================================================
+        // STANDALONE FORWARD KINEMATICS (FK) FUNCTION
+        // (Clean 1:1 mirror of Unity C# Forward Kinematics)
+        // =================================================================
+        /**
+         * Computes joint positions (Base, Shoulder, Elbow, Tip) from J2 and J3 angles in radians.
+         * 
+         * @param {number} j2Rad - Joint 2 angle (radians)
+         * @param {number} j3Rad - Joint 3 angle (radians)
+         * @param {number} L1 - Rear arm length (135)
+         * @param {number} L2 - Forearm length (147)
+         * @param {number} baseOffsetRadius - Shoulder horizontal offset (60)
+         * @param {number} baseOffsetHeight - Shoulder vertical offset (0)
+         * @returns {{ base: {x:number, y:number}, shoulder: {x:number, y:number}, elbow: {x:number, y:number}, tip: {x:number, y:number} }}
+         */
+        function solveFK(j2Rad, j3Rad, L1 = REAR_ARM_LENGTH, L2 = FORE_ARM_LENGTH, baseOffsetRadius = BASE_OFFSET_RADIUS, baseOffsetHeight = BASE_OFFSET_HEIGHT) {
+            const baseX = 0.0;
+            const baseY = 0.0;
+
+            const shoulderX = baseOffsetRadius;
+            const shoulderY = baseOffsetHeight;
+
+            const elbowX = shoulderX + L1 * Math.sin(j2Rad);
+            const elbowY = shoulderY + L1 * Math.cos(j2Rad);
+
+            const tipX = elbowX + L2 * Math.cos(j3Rad);
+            const tipY = elbowY - L2 * Math.sin(j3Rad);
+
+            return {
+                base: { x: baseX, y: baseY },
+                shoulder: { x: shoulderX, y: shoulderY },
+                elbow: { x: elbowX, y: elbowY },
+                tip: { x: tipX, y: tipY }
+            };
+        }
+
+        // =================================================================
+        // SIMULATION STATE & INTERACTIVE CONTROLS
+        // =================================================================
+        let targetWorld = { x: 200, y: 100 };
+        let currentJ2Rad = 0.4;
+        let currentJ3Rad = 0.7;
+        let targetJ2Rad = 0.4;
+        let targetJ3Rad = 0.7;
+        let lastValidTargetWorld = { x: 200, y: 100 };
+
+        let isTargetReachable = true;
+        let isDragging = false;
+        let lerpSpeed = 0.15;
+
+        let effectorType = 'gripper'; // 'gripper', 'suction', 'laser'
+        let effectorActive = false;   // open/closed or on/off
+
+        let options = {
+            showWorkspace: true,
+            showFKOverlay: true,
+            showJointLabels: true
+        };
+
+        // Canvas Coordinate Transform
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Center origin on canvas: world (0,0) is placed at (160, 490)
+        const ORIGIN_CANVAS_X = 160;
+        const ORIGIN_CANVAS_Y = 490;
+        const SCALE = 1.6; // 1.6 pixels per mm/unit
+
+        function worldToCanvas(wx, wy) {
+            return {
+                cx: ORIGIN_CANVAS_X + wx * SCALE,
+                cy: ORIGIN_CANVAS_Y - wy * SCALE
+            };
+        }
+
+        function canvasToWorld(cx, cy) {
+            return {
+                wx: (cx - ORIGIN_CANVAS_X) / SCALE,
+                wy: (ORIGIN_CANVAS_Y - cy) / SCALE
+            };
+        }
+
+        // =================================================================
+        // USER INTERACTION EVENT LISTENERS
+        // =================================================================
+        function updateTargetFromPointer(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            const cx = (e.clientX - rect.left) * scaleX;
+            const cy = (e.clientY - rect.top) * scaleY;
+
+            const world = canvasToWorld(cx, cy);
+            targetWorld.x = world.wx;
+            targetWorld.y = world.wy;
+
+            evaluateIK();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            updateTargetFromPointer(e);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                updateTargetFromPointer(e);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Touch support
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                isDragging = true;
+                updateTargetFromPointer(e.touches[0]);
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+            if (isDragging && e.touches.length > 0) {
+                updateTargetFromPointer(e.touches[0]);
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        function evaluateIK() {
+            const result = solveIK(targetWorld.x, targetWorld.y);
+            isTargetReachable = result.reachable;
+
+            if (isTargetReachable) {
+                targetJ2Rad = result.j2Rad;
+                targetJ3Rad = result.j3Rad;
+                lastValidTargetWorld = { x: targetWorld.x, y: targetWorld.y };
+            }
+            // CRITICAL REQUIREMENT: If unreachable, do NOT update targetJ2Rad / targetJ3Rad.
+            // The arm remains frozen at its last valid pose!
+        }
+
+        // =================================================================
+        // UI CONTROLS & HANDLERS
+        // =================================================================
+        function setEffectorType(type) {
+            effectorType = type;
+            document.querySelectorAll('.btn-group .btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase().includes(type));
+            });
+            updateEffectorButtonUI();
+        }
+
+        function toggleEffectorState() {
+            effectorActive = !effectorActive;
+            updateEffectorButtonUI();
+        }
+
+        function updateEffectorButtonUI() {
+            const btn = document.getElementById('effectorToggleBtn');
+            const icon = document.getElementById('effectorStateIcon');
+            const label = document.getElementById('effectorStateLabel');
+
+            btn.className = 'toggle-btn ' + (effectorActive ? 'state-on' : '');
+
+            if (effectorType === 'gripper') {
+                icon.textContent = effectorActive ? '🔒' : '🔓';
+                label.textContent = `Gripper: ${effectorActive ? 'CLOSED' : 'OPEN'}`;
+            } else if (effectorType === 'suction') {
+                icon.textContent = effectorActive ? '⚡' : '⚪';
+                label.textContent = `Suction: ${effectorActive ? 'VACUUM ON' : 'OFF'}`;
+            } else if (effectorType === 'laser') {
+                icon.textContent = effectorActive ? '🔴' : '⚫';
+                label.textContent = `Laser: ${effectorActive ? 'BEAM ON' : 'OFF'}`;
+            }
+        }
+
+        function setPresetTarget(x, y) {
+            targetWorld.x = x;
+            targetWorld.y = y;
+            evaluateIK();
+        }
+
+        function updateLerpSpeed(val) {
+            lerpSpeed = parseFloat(val);
+            document.getElementById('lerpVal').textContent = lerpSpeed.toFixed(2);
+        }
+
+        function toggleOption(key, checked) {
+            options[key] = checked;
+        }
+
+        // =================================================================
+        // RENDERING PIPELINE
+        // =================================================================
+        function renderScene(currentPose) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw Grid & Axes
+            drawGrid();
+
+            // 2. Draw Workspace Range (Annulus)
+            if (options.showWorkspace) {
+                drawReachableWorkspace();
+            }
+
+            // 3. Draw Base Turret Structure
+            drawBaseTurret();
+
+            // 4. Draw Arm Links & Joints
+            drawArmLinks(currentPose);
+
+            // 5. Draw End Effector
+            drawEndEffector(currentPose.tip, currentJ2Rad, currentJ3Rad);
+
+            // 6. Draw Target Cursor Marker & Status Overlay
+            drawTargetMarker(currentPose);
+        }
+
+        function drawGrid() {
+            ctx.save();
+
+            // Background Grid Lines
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+
+            const gridSpacingWorld = 50; // Every 50 units
+            const gridSpacingPx = gridSpacingWorld * SCALE;
+
+            for (let x = ORIGIN_CANVAS_X; x < canvas.width; x += gridSpacingPx) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let x = ORIGIN_CANVAS_X - gridSpacingPx; x > 0; x -= gridSpacingPx) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = ORIGIN_CANVAS_Y; y < canvas.height; y += gridSpacingPx) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            for (let y = ORIGIN_CANVAS_Y - gridSpacingPx; y > 0; y -= gridSpacingPx) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Ground Line (Y = 0)
+            const groundY = ORIGIN_CANVAS_Y;
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(canvas.width, groundY);
+            ctx.stroke();
+
+            // Ground Hatching
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1.5;
+            for (let x = 10; x < canvas.width; x += 25) {
+                ctx.beginPath();
+                ctx.moveTo(x, groundY);
+                ctx.lineTo(x - 15, groundY + 15);
+                ctx.stroke();
+            }
+
+            // Origin Marker
+            const origin = worldToCanvas(0, 0);
+            ctx.fillStyle = '#64748b';
+            ctx.font = '11px monospace';
+            ctx.fillText('Base Origin (0,0)', origin.cx - 45, origin.cy + 25);
+
+            ctx.restore();
+        }
+
+        function drawReachableWorkspace() {
+            ctx.save();
+
+            // Shoulder Pivot in canvas space
+            const shoulder = worldToCanvas(BASE_OFFSET_RADIUS, BASE_OFFSET_HEIGHT);
+            const rMinPx = R_MIN * SCALE;
+            const rMaxPx = R_MAX * SCALE;
+
+            // Fill Reachable Annulus Area with transparent tint
+            ctx.beginPath();
+            ctx.arc(shoulder.cx, shoulder.cy, rMaxPx, 0, Math.PI * 2, false);
+            ctx.arc(shoulder.cx, shoulder.cy, rMinPx, 0, Math.PI * 2, true);
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.04)';
+            ctx.fill();
+
+            // Dashed Outer Circle
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 6]);
+
+            ctx.beginPath();
+            ctx.arc(shoulder.cx, shoulder.cy, rMaxPx, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Dashed Inner Circle
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+            ctx.beginPath();
+            ctx.arc(shoulder.cx, shoulder.cy, rMinPx, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+
+        function drawBaseTurret() {
+            ctx.save();
+            const b = worldToCanvas(0, 0);
+            const s = worldToCanvas(BASE_OFFSET_RADIUS, BASE_OFFSET_HEIGHT);
+
+            // Base Pillar / Pedestal Box
+            const pedestalWidth = BASE_OFFSET_RADIUS * SCALE;
+            const pedestalHeight = 35;
+
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+
+            // Main base housing
+            ctx.fillRect(b.cx - 20, b.cy - pedestalHeight, pedestalWidth + 30, pedestalHeight);
+            ctx.strokeRect(b.cx - 20, b.cy - pedestalHeight, pedestalWidth + 30, pedestalHeight);
+
+            // Base Turret Axis line
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(b.cx, b.cy + 10);
+            ctx.lineTo(b.cx, b.cy - pedestalHeight - 15);
+            ctx.stroke();
+
+            // Offset Radius dimension line
+            ctx.setLineDash([]);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(b.cx, b.cy - 10);
+            ctx.lineTo(s.cx, s.cy - 10);
+            ctx.stroke();
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = '10px monospace';
+            ctx.fillText(`offset: ${BASE_OFFSET_RADIUS}mm`, b.cx + 8, b.cy - 15);
+
+            ctx.restore();
+        }
+
+        function drawArmLinks(pose) {
+            ctx.save();
+
+            const s = worldToCanvas(pose.shoulder.x, pose.shoulder.y);
+            const e = worldToCanvas(pose.elbow.x, pose.elbow.y);
+            const t = worldToCanvas(pose.tip.x, pose.tip.y);
+
+            // -------------------------------------------------------------
+            // LINK 1: Rear Arm (Shoulder -> Elbow) - Length 135
+            // -------------------------------------------------------------
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 18;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(s.cx, s.cy);
+            ctx.lineTo(e.cx, e.cy);
+            ctx.stroke();
+
+            // Inner core gradient for Link 1
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.moveTo(s.cx, s.cy);
+            ctx.lineTo(e.cx, e.cy);
+            ctx.stroke();
+
+            // -------------------------------------------------------------
+            // LINK 2: Forearm (Elbow -> Tip) - Length 147
+            // -------------------------------------------------------------
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 14;
+            ctx.beginPath();
+            ctx.moveTo(e.cx, e.cy);
+            ctx.lineTo(t.cx, t.cy);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(e.cx, e.cy);
+            ctx.lineTo(t.cx, t.cy);
+            ctx.stroke();
+
+            // Parallel Rod Visual (Dobot signature mechanical linkage look)
+            const angleElbowTip = Math.atan2(t.cy - e.cy, t.cx - e.cx);
+            const rodOffset = 14;
+            const r1x = e.cx + rodOffset * Math.cos(angleElbowTip + Math.PI / 2);
+            const r1y = e.cy + rodOffset * Math.sin(angleElbowTip + Math.PI / 2);
+            const r2x = t.cx + rodOffset * Math.cos(angleElbowTip + Math.PI / 2);
+            const r2y = t.cy + rodOffset * Math.sin(angleElbowTip + Math.PI / 2);
+
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(r1x, r1y);
+            ctx.lineTo(r2x, r2y);
+            ctx.stroke();
+
+            // -------------------------------------------------------------
+            // JOINTS: Shoulder & Elbow Pivot Rings
+            // -------------------------------------------------------------
+            // Shoulder Joint Circle
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(s.cx, s.cy, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(s.cx, s.cy, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Elbow Joint Circle
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(e.cx, e.cy, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.arc(e.cx, e.cy, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // -------------------------------------------------------------
+            // LABELS ON JOINTS
+            // -------------------------------------------------------------
+            if (options.showJointLabels) {
+                const j2DegStr = (currentJ2Rad * 180 / Math.PI).toFixed(1) + '°';
+                const j3DegStr = (currentJ3Rad * 180 / Math.PI).toFixed(1) + '°';
+
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillText(`J2 (Shoulder): ${j2DegStr}`, s.cx - 40, s.cy + 28);
+                ctx.fillText(`J3 (Elbow): ${j3DegStr}`, e.cx - 30, e.cy - 18);
+            }
+
+            ctx.restore();
+        }
+
+        function drawEndEffector(tipWorld, j2Rad, j3Rad) {
+            ctx.save();
+            const t = worldToCanvas(tipWorld.x, tipWorld.y);
+
+            // Dobot keeps end-effector level (facing vertically down in side view)
+            const effectorAngle = Math.PI / 2; // Pointing downwards
+
+            ctx.translate(t.cx, t.cy);
+            ctx.rotate(effectorAngle);
+
+            if (effectorType === 'gripper') {
+                // Main mount block
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(-10, 0, 20, 10);
+
+                // Gripper Fingers
+                const openOffset = effectorActive ? 2 : 8; // Closed vs Open gap
+                ctx.fillStyle = effectorActive ? '#22c55e' : '#cbd5e1';
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 1;
+
+                // Left Finger
+                ctx.fillRect(-openOffset - 4, 10, 4, 16);
+                ctx.strokeRect(-openOffset - 4, 10, 4, 16);
+
+                // Right Finger
+                ctx.fillRect(openOffset, 10, 4, 16);
+                ctx.strokeRect(openOffset, 10, 4, 16);
+
+                // Center Grip Status Indicator LED
+                ctx.fillStyle = effectorActive ? '#22c55e' : '#64748b';
+                ctx.beginPath();
+                ctx.arc(0, 5, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (effectorType === 'suction') {
+                // Stem cylinder
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(-4, 0, 8, 14);
+
+                // Silicone Cup Cone
+                ctx.fillStyle = effectorActive ? '#38bdf8' : '#94a3b8';
+                ctx.beginPath();
+                ctx.moveTo(-4, 14);
+                ctx.lineTo(4, 14);
+                ctx.lineTo(9, 24);
+                ctx.lineTo(-9, 24);
+                ctx.closePath();
+                ctx.fill();
+
+                if (effectorActive) {
+                    // Vacuum Glow Ring
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 25, 10, 4, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+            } else if (effectorType === 'laser') {
+                // Laser Housing Box
+                ctx.fillStyle = '#334155';
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 1.5;
+                ctx.fillRect(-8, 0, 16, 16);
+                ctx.strokeRect(-8, 0, 16, 16);
+
+                // Lens Aperture
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(0, 16, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (effectorActive) {
+                    // Laser Beam Projection
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 16);
+                    ctx.lineTo(0, 150); // Downward laser ray
+                    ctx.stroke();
+
+                    // Laser Dot Pulse
+                    ctx.fillStyle = '#ef4444';
+                    ctx.shadowColor = '#ef4444';
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.arc(0, 150, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function drawTargetMarker(currentPose) {
+            ctx.save();
+
+            const targetPosPx = worldToCanvas(targetWorld.x, targetWorld.y);
+            const fkTipPx = worldToCanvas(currentPose.tip.x, currentPose.tip.y);
+
+            // FK Overlay Distance Line (verifies FK matches IK target when reachable)
+            if (options.showFKOverlay && isTargetReachable) {
+                ctx.strokeStyle = 'rgba(34, 197, 94, 0.5)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(fkTipPx.cx, fkTipPx.cy);
+                ctx.lineTo(targetPosPx.cx, targetPosPx.cy);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Target Crosshair Ring
+            const color = isTargetReachable ? '#22c55e' : '#ef4444';
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+
+            // Outer Reticle Ring
+            ctx.beginPath();
+            ctx.arc(targetPosPx.cx, targetPosPx.cy, 12, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Crosshair lines
+            ctx.beginPath();
+            ctx.moveTo(targetPosPx.cx - 16, targetPosPx.cy);
+            ctx.lineTo(targetPosPx.cx + 16, targetPosPx.cy);
+            ctx.moveTo(targetPosPx.cx, targetPosPx.cy - 16);
+            ctx.lineTo(targetPosPx.cx, targetPosPx.cy + 16);
+            ctx.stroke();
+
+            // Center Dot
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(targetPosPx.cx, targetPosPx.cy, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // UNREACHABLE Warning Text Overlay at Cursor Target
+            if (!isTargetReachable) {
+                ctx.fillStyle = '#ef4444';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.shadowColor = '#000';
+                ctx.shadowBlur = 4;
+                ctx.fillText('⚠️ UNREACHABLE TARGET', targetPosPx.cx + 18, targetPosPx.cy - 10);
+                ctx.font = '10px monospace';
+                ctx.fillText(`Dist from shoulder: ${solveIK(targetWorld.x, targetWorld.y).radius.toFixed(1)}mm (Max: ${R_MAX}mm)`, targetPosPx.cx + 18, targetPosPx.cy + 6);
+            } else {
+                ctx.fillStyle = '#22c55e';
+                ctx.font = '10px monospace';
+                ctx.fillText(`Target: (${targetWorld.x.toFixed(1)}, ${targetWorld.y.toFixed(1)})`, targetPosPx.cx + 18, targetPosPx.cy + 4);
+            }
+
+            ctx.restore();
+        }
+
+        // =================================================================
+        // MAIN ANIMATION & READOUT LOOP
+        // =================================================================
+        function updateReadout(currentPose) {
+            const ikResult = solveIK(targetWorld.x, targetWorld.y);
+
+            // Status Badge
+            const badge = document.getElementById('statusBadge');
+            if (isTargetReachable) {
+                badge.className = 'status-badge reachable';
+                badge.textContent = 'REACHABLE';
+            } else {
+                badge.className = 'status-badge unreachable';
+                badge.textContent = 'UNREACHABLE';
+            }
+
+            // Values
+            document.getElementById('valJ2').textContent = (currentJ2Rad * 180 / Math.PI).toFixed(2) + '°';
+            document.getElementById('valJ3').textContent = (currentJ3Rad * 180 / Math.PI).toFixed(2) + '°';
+            document.getElementById('valTarget').textContent = `(${targetWorld.x.toFixed(1)}, ${targetWorld.y.toFixed(1)})`;
+            document.getElementById('valTip').textContent = `(${currentPose.tip.x.toFixed(1)}, ${currentPose.tip.y.toFixed(1)})`;
+            document.getElementById('valCosBeta').textContent = ikResult.cosBeta.toFixed(4);
+        }
+
+        function animationLoop() {
+            // Smooth lerping of joint angles towards IK solution (if reachable)
+            if (lerpSpeed >= 1.0) {
+                currentJ2Rad = targetJ2Rad;
+                currentJ3Rad = targetJ3Rad;
+            } else {
+                currentJ2Rad += (targetJ2Rad - currentJ2Rad) * lerpSpeed;
+                currentJ3Rad += (targetJ3Rad - currentJ3Rad) * lerpSpeed;
+            }
+
+            // Calculate Forward Kinematics pose for current display angles
+            const currentPose = solveFK(currentJ2Rad, currentJ3Rad);
+
+            // Render Frame
+            renderScene(currentPose);
+
+            // Update UI Sidebar
+            updateReadout(currentPose);
+
+            requestAnimationFrame(animationLoop);
+        }
+
+        // Initialize default target & start loop
+        evaluateIK();
+        requestAnimationFrame(animationLoop);
+
+    </script>
+</body>
+</html>

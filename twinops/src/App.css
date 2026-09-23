@@ -1,0 +1,332 @@
+:root {
+  --bg-color: #0b1120;
+  --panel-bg: rgba(15, 23, 42, 0.92);
+  --panel-border: #334155;
+  --accent-color: #38bdf8;
+  --accent-hover: #0284c7;
+  --success-color: #22c55e;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body, html, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+}
+
+.twinops-app {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+.canvas-wrapper {
+  flex: 1;
+  height: 100%;
+  position: relative;
+}
+
+/* Dashboard Panel */
+.dashboard-panel {
+  width: 380px;
+  height: 100%;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--panel-border);
+  backdrop-filter: blur(12px);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.panel-header {
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 0.85rem;
+}
+
+.logo-title h2 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--accent-color);
+  letter-spacing: 0.05em;
+}
+
+.logo-title .subtitle {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--success-color);
+}
+
+.dot.online {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-color);
+  box-shadow: 0 0 8px var(--success-color);
+}
+
+/* Section Cards */
+.section-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent-color);
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+/* Buttons & Controls */
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.btn-mode {
+  background: rgba(51, 65, 85, 0.6);
+  border: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-mode.active {
+  background: var(--accent-color);
+  color: #0f172a;
+  border-color: var(--accent-color);
+}
+
+.btn-action {
+  background: rgba(51, 65, 85, 0.8);
+  border: 1px solid var(--panel-border);
+  color: var(--text-main);
+  padding: 0.5rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.btn-action.full {
+  width: 100%;
+}
+
+.btn-action:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.btn-action.outline {
+  background: transparent;
+  border-color: var(--panel-border);
+  color: var(--text-muted);
+}
+
+/* Telemetry Grid */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tel-item {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--panel-border);
+  padding: 0.5rem;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.tel-label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.tel-val {
+  font-family: ui-monospace, monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.status-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+}
+
+.badge.moving { background: rgba(56, 189, 248, 0.2); color: var(--accent-color); }
+.badge.idle { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
+.badge.carrying { background: rgba(34, 197, 94, 0.2); color: var(--success-color); }
+.badge.free { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
+.badge.state-name { background: rgba(245, 158, 11, 0.2); color: var(--warning-color); }
+.badge.stream { background: rgba(51, 65, 85, 0.5); color: var(--text-main); }
+
+/* Joint Control */
+.joint-control {
+  margin-bottom: 0.75rem;
+}
+
+.joint-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.val-badge {
+  font-family: ui-monospace, monospace;
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-step {
+  background: rgba(51, 65, 85, 0.8);
+  border: 1px solid var(--panel-border);
+  color: var(--text-main);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent-color);
+}
+
+/* Axis Debug */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+}
+
+.axis-config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.axis-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.axis-item select {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--panel-border);
+  color: var(--text-main);
+  padding: 0.25rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* Architecture Flow */
+.flow-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+}
+
+.flow-node {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--panel-border);
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  width: 100%;
+  text-align: center;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.flow-node.active {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.flow-node.highlight {
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.flow-arrow {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}

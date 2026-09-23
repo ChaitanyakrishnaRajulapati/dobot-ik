@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TwinOps - Real-Time Industrial Robot Digital Twin</title>
+    
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+      }
+    }
+    </script>
+
+    <style>
+        :root {
+            --bg-color: #0b1120;
+            --panel-bg: rgba(15, 23, 42, 0.92);
+            --panel-border: #334155;
+            --accent-color: #38bdf8;
+            --accent-hover: #0284c7;
+            --success-color: #22c55e;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        .twinops-app {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        #canvas-container {
+            flex: 1;
+            height: 100%;
+            position: relative;
+        }
+
+        /* Dashboard Panel */
+        .dashboard-panel {
+            width: 380px;
+            height: 100%;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--panel-border);
+            backdrop-filter: blur(12px);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            overflow-y: auto;
+            box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .panel-header {
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 0.85rem;
+        }
+
+        .logo-title h2 {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--accent-color);
+            letter-spacing: 0.05em;
+        }
+
+        .logo-title .subtitle {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--success-color);
+        }
+
+        .dot.online {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success-color);
+            box-shadow: 0 0 8px var(--success-color);
+        }
+
+        .section-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        .mode-toggle {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .btn-mode {
+            background: rgba(51, 65, 85, 0.6);
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-mode.active {
+            background: var(--accent-color);
+            color: #0f172a;
+            border-color: var(--accent-color);
+        }
+
+        .btn-action {
+            background: rgba(51, 65, 85, 0.8);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 0.5rem 0.85rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .btn-action.full {
+            width: 100%;
+        }
+
+        .btn-action:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .btn-action.outline {
+            background: transparent;
+            border-color: var(--panel-border);
+            color: var(--text-muted);
+        }
+
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .tel-item {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--panel-border);
+            padding: 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .tel-label {
+            display: block;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-bottom: 0.2rem;
+        }
+
+        .tel-val {
+            font-family: ui-monospace, monospace;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .status-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-muted);
+        }
+
+        .badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            font-family: ui-monospace, monospace;
+        }
+
+        .badge.moving { background: rgba(56, 189, 248, 0.2); color: var(--accent-color); }
+        .badge.idle { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
+        .badge.carrying { background: rgba(34, 197, 94, 0.2); color: var(--success-color); }
+        .badge.free { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
+        .badge.state-name { background: rgba(245, 158, 11, 0.2); color: var(--warning-color); }
+        .badge.stream { background: rgba(51, 65, 85, 0.5); color: var(--text-main); }
+
+        .joint-control {
+            margin-bottom: 0.75rem;
+        }
+
+        .joint-label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .val-badge {
+            font-family: ui-monospace, monospace;
+            color: var(--text-main);
+            font-weight: 700;
+        }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-step {
+            background: rgba(51, 65, 85, 0.8);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-color);
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+        }
+
+        .axis-config-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+        }
+
+        .axis-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .axis-item select {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 0.25rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.7rem;
+        }
+
+        .flow-node {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--panel-border);
+            padding: 0.35rem 0.75rem;
+            border-radius: 4px;
+            width: 100%;
+            text-align: center;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .flow-node.active {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .flow-node.highlight {
+            border-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: 0.65rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="twinops-app">
+        <!-- 3D Canvas -->
+        <div id="canvas-container"></div>
+
+        <!-- Dashboard UI Sidebar -->
+        <aside class="dashboard-panel">
+            <div class="panel-header">
+                <div class="logo-title">
+                    <h2>🤖 TWINOPS</h2>
+                    <span class="subtitle">REAL-TIME INDUSTRIAL DIGITAL TWIN</span>
+                </div>
+                <div class="status-indicator">
+                    <span class="dot online"></span>
+                    <span class="status-text">SIMULATION ONLINE</span>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">CONTROL MODE</div>
+                <div class="mode-toggle">
+                    <button id="btn-auto" class="btn-mode active" onclick="setControlMode('AUTO')">🔄 AUTO MODE</button>
+                    <button id="btn-manual" class="btn-mode" onclick="setControlMode('MANUAL')">🎛️ MANUAL MODE</button>
+                </div>
+                <button class="btn-action full" onclick="goHome()">🏠 GO HOME POSE</button>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">ROBOT TELEMETRY</div>
+                <div class="telemetry-grid">
+                    <div class="tel-item">
+                        <span class="tel-label">J1 (Turret)</span>
+                        <span id="tel-j1" class="tel-val">+0.0°</span>
+                    </div>
+                    <div class="tel-item">
+                        <span class="tel-label">J2 (Shoulder)</span>
+                        <span id="tel-j2" class="tel-val">+0.0°</span>
+                    </div>
+                    <div class="tel-item">
+                        <span class="tel-label">J3 (Elbow)</span>
+                        <span id="tel-j3" class="tel-val">+0.0°</span>
+                    </div>
+                </div>
+
+                <div class="status-summary">
+                    <div class="status-row">
+                        <span>Robot State:</span>
+                        <span id="badge-robot-state" class="badge idle">IDLE</span>
+                    </div>
+                    <div class="status-row">
+                        <span>End Effector:</span>
+                        <span id="badge-effector-state" class="badge free">FREE</span>
+                    </div>
+                    <div class="status-row">
+                        <span>Process Step:</span>
+                        <span id="badge-process-step" class="badge state-name">HOME</span>
+                    </div>
+                    <div class="status-row">
+                        <span>Data Stream:</span>
+                        <span class="badge stream">SIMULATED TELEMETRY</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">MANUAL JOINT CONTROL</div>
+                
+                <div class="joint-control">
+                    <div class="joint-label-row">
+                        <span>J1 Angle</span>
+                        <span id="val-j1" class="val-badge">0.0°</span>
+                    </div>
+                    <div class="slider-row">
+                        <button class="btn-step" onclick="stepJoint('j1', -5)">-</button>
+                        <input type="range" id="slider-j1" min="-135" max="135" value="0" oninput="onSliderInput('j1', this.value)">
+                        <button class="btn-step" onclick="stepJoint('j1', 5)">+</button>
+                    </div>
+                </div>
+
+                <div class="joint-control">
+                    <div class="joint-label-row">
+                        <span>J2 Angle</span>
+                        <span id="val-j2" class="val-badge">0.0°</span>
+                    </div>
+                    <div class="slider-row">
+                        <button class="btn-step" onclick="stepJoint('j2', -5)">-</button>
+                        <input type="range" id="slider-j2" min="-85" max="85" value="0" oninput="onSliderInput('j2', this.value)">
+                        <button class="btn-step" onclick="stepJoint('j2', 5)">+</button>
+                    </div>
+                </div>
+
+                <div class="joint-control">
+                    <div class="joint-label-row">
+                        <span>J3 Angle</span>
+                        <span id="val-j3" class="val-badge">0.0°</span>
+                    </div>
+                    <div class="slider-row">
+                        <button class="btn-step" onclick="stepJoint('j3', -5)">-</button>
+                        <input type="range" id="slider-j3" min="-90" max="90" value="0" oninput="onSliderInput('j3', this.value)">
+                        <button class="btn-step" onclick="stepJoint('j3', 5)">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">VISUAL JOINT AXIS DEBUG</div>
+                <label class="checkbox-row">
+                    <input type="checkbox" id="chk-axes" checked onchange="toggleAxes(this.checked)">
+                    <span>Show Joint Local Axis Helpers</span>
+                </label>
+
+                <div class="axis-config-grid">
+                    <div class="axis-item">
+                        <span>J1 Axis:</span>
+                        <select id="sel-j1-axis" onchange="changeJointAxis('j1', this.value)">
+                            <option value="X">X Axis</option>
+                            <option value="Y" selected>Y Axis</option>
+                            <option value="Z">Z Axis</option>
+                        </select>
+                    </div>
+                    <div class="axis-item">
+                        <span>J2 Axis:</span>
+                        <select id="sel-j2-axis" onchange="changeJointAxis('j2', this.value)">
+                            <option value="X">X Axis</option>
+                            <option value="Y">Y Axis</option>
+                            <option value="Z" selected>Z Axis</option>
+                        </select>
+                    </div>
+                    <div class="axis-item">
+                        <span>J3 Axis:</span>
+                        <select id="sel-j3-axis" onchange="changeJointAxis('j3', this.value)">
+                            <option value="X">X Axis</option>
+                            <option value="Y">Y Axis</option>
+                            <option value="Z" selected>Z Axis</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn-action outline full" style="margin-top: 0.75rem;" onclick="resetCamera()">
+                    🎥 RESET CAMERA VIEW
+                </button>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">DIGITAL TWIN ARCHITECTURE</div>
+                <div class="flow-diagram">
+                    <div class="flow-node">PHYSICAL ROBOT</div>
+                    <div class="flow-arrow">↓ (Joint Telemetry)</div>
+                    <div class="flow-node active">TwinOps Controller</div>
+                    <div class="flow-arrow">↓ (Quaternion Local Transforms)</div>
+                    <div class="flow-node highlight">3D DIGITAL TWIN</div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- MAIN ENGINE SCRIPT -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // =========================================================================
+        // ROBOT CONTROLLER CLASS
+        // =========================================================================
+        class RobotController {
+            constructor() {
+                this.joints = {
+                    j1: { node: null, initialQ: new THREE.Quaternion(), axis: 'Y', dir: 1, currentDeg: 0, targetDeg: 0, startDeg: 0, minDeg: -135, maxDeg: 135 },
+                    j2: { node: null, initialQ: new THREE.Quaternion(), axis: 'Z', dir: 1, currentDeg: 0, targetDeg: 0, startDeg: 0, minDeg: -85, maxDeg: 85 },
+                    j3: { node: null, initialQ: new THREE.Quaternion(), axis: 'Z', dir: 1, currentDeg: 0, targetDeg: 0, startDeg: 0, minDeg: -90, maxDeg: 90 }
+                };
+                this.tipNode = null;
+                this.axesHelpers = [];
+                this.isMoving = false;
+                this.moveProgress = 1.0;
+                this.moveDuration = 1.0;
+            }
+
+            bindNodes(j1, j2, j3, tip) {
+                this.joints.j1.node = j1; this.joints.j1.initialQ.copy(j1.quaternion);
+                this.joints.j2.node = j2; this.joints.j2.initialQ.copy(j2.quaternion);
+                this.joints.j3.node = j3; this.joints.j3.initialQ.copy(j3.quaternion);
+                this.tipNode = tip;
+
+                this.applyAllJointRotations();
+            }
+
+            setJointTargets(j1Deg, j2Deg, j3Deg, speedMult = 1.0) {
+                const t1 = THREE.MathUtils.clamp(j1Deg, this.joints.j1.minDeg, this.joints.j1.maxDeg);
+                const t2 = THREE.MathUtils.clamp(j2Deg, this.joints.j2.minDeg, this.joints.j2.maxDeg);
+                const t3 = THREE.MathUtils.clamp(j3Deg, this.joints.j3.minDeg, this.joints.j3.maxDeg);
+
+                this.joints.j1.startDeg = this.joints.j1.currentDeg;
+                this.joints.j2.startDeg = this.joints.j2.currentDeg;
+                this.joints.j3.startDeg = this.joints.j3.currentDeg;
+
+                this.joints.j1.targetDeg = t1;
+                this.joints.j2.targetDeg = t2;
+                this.joints.j3.targetDeg = t3;
+
+                const maxDist = Math.max(
+                    Math.abs(t1 - this.joints.j1.startDeg),
+                    Math.abs(t2 - this.joints.j2.startDeg),
+                    Math.abs(t3 - this.joints.j3.startDeg)
+                );
+
+                if (maxDist < 0.01) {
+                    this.moveProgress = 1.0;
+                    this.isMoving = false;
+                    return;
+                }
+
+                this.moveDuration = Math.max(0.35, (maxDist / 60.0) / speedMult);
+                this.moveProgress = 0.0;
+                this.isMoving = true;
+            }
+
+            setSingleJointTarget(key, deg) {
+                const j = this.joints[key];
+                j.targetDeg = THREE.MathUtils.clamp(deg, j.minDeg, j.maxDeg);
+                j.currentDeg = j.targetDeg;
+                this.applyJointRotation(key);
+            }
+
+            update(delta) {
+                if (!this.isMoving) return;
+
+                this.moveProgress += delta / this.moveDuration;
+
+                if (this.moveProgress >= 1.0) {
+                    this.moveProgress = 1.0;
+                    this.isMoving = false;
+                    this.joints.j1.currentDeg = this.joints.j1.targetDeg;
+                    this.joints.j2.currentDeg = this.joints.j2.targetDeg;
+                    this.joints.j3.currentDeg = this.joints.j3.targetDeg;
+                } else {
+                    const t = this.easeInOutCubic(this.moveProgress);
+                    this.joints.j1.currentDeg = this.joints.j1.startDeg + (this.joints.j1.targetDeg - this.joints.j1.startDeg) * t;
+                    this.joints.j2.currentDeg = this.joints.j2.startDeg + (this.joints.j2.targetDeg - this.joints.j2.startDeg) * t;
+                    this.joints.j3.currentDeg = this.joints.j3.startDeg + (this.joints.j3.targetDeg - this.joints.j3.startDeg) * t;
+                }
+
+                this.applyAllJointRotations();
+            }
+
+            applyAllJointRotations() {
+                this.applyJointRotation('j1');
+                this.applyJointRotation('j2');
+                this.applyJointRotation('j3');
+            }
+
+            applyJointRotation(key) {
+                const j = this.joints[key];
+                if (!j.node) return;
+
+                const rad = THREE.MathUtils.degToRad(j.currentDeg) * j.dir;
+                const axisVec = this.getAxisVector(j.axis);
+
+                // CRITICAL LOCAL ROTATION MULTIPLICATION: newLocal = initialLocal * QuaternionFromAxisAngle(localAxis, angle)
+                const qRot = new THREE.Quaternion().setFromAxisAngle(axisVec, rad);
+                j.node.quaternion.copy(j.initialQ).multiply(qRot);
+            }
+
+            getAxisVector(axis) {
+                switch (axis) {
+                    case 'X': return new THREE.Vector3(1, 0, 0);
+                    case 'Y': return new THREE.Vector3(0, 1, 0);
+                    case 'Z': return new THREE.Vector3(0, 0, 1);
+                }
+            }
+
+            easeInOutCubic(t) {
+                return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            }
+        }
+
+        // =========================================================================
+        // PICK AND PLACE CONTROLLER CLASS
+        // =========================================================================
+        class PickAndPlaceController {
+            constructor(robotController) {
+                this.robot = robotController;
+                this.state = 'HOME';
+                this.endEffectorState = 'FREE';
+                this.timer = 0;
+                this.blockMesh = null;
+                this.scene = null;
+                this.initialBlockPos = new THREE.Vector3();
+
+                this.poses = {
+                    home: { j1: 0, j2: 0, j3: 0 },
+                    pickupApproach: { j1: 29, j2: 24, j3: 42 },
+                    pickup: { j1: 29, j2: 44, j3: 56 },
+                    lift: { j1: 29, j2: 15, j3: 25 },
+                    placeApproach: { j1: -29, j2: 15, j3: 25 },
+                    place: { j1: -29, j2: 44, j3: 56 },
+                    retract: { j1: -29, j2: 15, j3: 25 }
+                };
+            }
+
+            setBlockAndScene(block, scene) {
+                this.blockMesh = block;
+                this.scene = scene;
+                if (block) this.initialBlockPos.copy(block.position);
+            }
+
+            update(delta) {
+                if (this.robot.isMoving) return;
+
+                switch (this.state) {
+                    case 'HOME':
+                        this.robot.setJointTargets(this.poses.home.j1, this.poses.home.j2, this.poses.home.j3);
+                        this.state = 'MOVE_TO_PICKUP_APPROACH';
+                        break;
+                    case 'MOVE_TO_PICKUP_APPROACH':
+                        this.robot.setJointTargets(this.poses.pickupApproach.j1, this.poses.pickupApproach.j2, this.poses.pickupApproach.j3);
+                        this.state = 'MOVE_TO_PICKUP';
+                        break;
+                    case 'MOVE_TO_PICKUP':
+                        this.robot.setJointTargets(this.poses.pickup.j1, this.poses.pickup.j2, this.poses.pickup.j3);
+                        this.state = 'PICK';
+                        break;
+                    case 'PICK':
+                        this.attachBlock();
+                        this.endEffectorState = 'CARRYING';
+                        this.state = 'LIFT';
+                        break;
+                    case 'LIFT':
+                        this.robot.setJointTargets(this.poses.lift.j1, this.poses.lift.j2, this.poses.lift.j3);
+                        this.state = 'MOVE_TO_PLACE_APPROACH';
+                        break;
+                    case 'MOVE_TO_PLACE_APPROACH':
+                        this.robot.setJointTargets(this.poses.placeApproach.j1, this.poses.placeApproach.j2, this.poses.placeApproach.j3);
+                        this.state = 'MOVE_TO_PLACE';
+                        break;
+                    case 'MOVE_TO_PLACE':
+                        this.robot.setJointTargets(this.poses.place.j1, this.poses.place.j2, this.poses.place.j3);
+                        this.state = 'PLACE';
+                        break;
+                    case 'PLACE':
+                        this.detachBlock();
+                        this.endEffectorState = 'FREE';
+                        this.state = 'RETRACT';
+                        break;
+                    case 'RETRACT':
+                        this.robot.setJointTargets(this.poses.retract.j1, this.poses.retract.j2, this.poses.retract.j3);
+                        this.state = 'RETURN_HOME';
+                        break;
+                    case 'RETURN_HOME':
+                        this.robot.setJointTargets(this.poses.home.j1, this.poses.home.j2, this.poses.home.j3);
+                        this.state = 'WAIT';
+                        this.timer = 0;
+                        break;
+                    case 'WAIT':
+                        this.timer += delta;
+                        if (this.timer >= 1.5) {
+                            this.resetBlock();
+                            this.state = 'MOVE_TO_PICKUP_APPROACH';
+                        }
+                        break;
+                }
+            }
+
+            attachBlock() {
+                if (this.blockMesh && this.robot.tipNode) {
+                    this.robot.tipNode.attach(this.blockMesh);
+                }
+            }
+
+            detachBlock() {
+                if (this.blockMesh && this.scene) {
+                    this.scene.attach(this.blockMesh);
+                }
+            }
+
+            resetBlock() {
+                if (this.blockMesh && this.scene) {
+                    if (this.blockMesh.parent !== this.scene) this.scene.attach(this.blockMesh);
+                    this.blockMesh.position.copy(this.initialBlockPos);
+                    this.blockMesh.rotation.set(0, 0, 0);
+                    this.endEffectorState = 'FREE';
+                }
+            }
+        }
+
+        // =========================================================================
+        // GLOBAL APP STATE & THREE.JS INITIALIZATION
+        // =========================================================================
+        let scene, camera, renderer, controls;
+        let robotController = new RobotController();
+        let pickAndPlaceController = new PickAndPlaceController(robotController);
+        let controlMode = 'AUTO';
+        let showAxes = true;
+        let clock = new THREE.Clock();
+        let axesHelpers = [];
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b1120);
+            scene.fog = new THREE.FogExp2(0x0b1120, 0.08);
+
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(4.2, 3.2, 4.2);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0.8, 0.8, 0);
+
+            // Lighting
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambient);
+
+            const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+            sun.position.set(6, 10, 6);
+            sun.castShadow = true;
+            sun.shadow.mapSize.width = 2048;
+            sun.shadow.mapSize.height = 2048;
+            sun.shadow.camera.near = 0.5;
+            sun.shadow.camera.far = 25;
+            sun.shadow.camera.left = -6; sun.shadow.camera.right = 6;
+            sun.shadow.camera.top = 6; sun.shadow.camera.bottom = -6;
+            scene.add(sun);
+
+            const fill = new THREE.DirectionalLight(0x38bdf8, 0.4);
+            fill.position.set(-6, 4, -6);
+            scene.add(fill);
+
+            // Environment
+            createEnvironment();
+
+            // Build Robot Model (Rigid Object Hierarchy: Base -> J1 -> J2 -> J3 -> Tip)
+            createRobotModel();
+
+            // Pick & Place Objects
+            createWorkstationObjects();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createEnvironment() {
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(30, 30),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8, metalness: 0.2 })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            const grid = new THREE.GridHelper(30, 60, 0x38bdf8, 0x334155);
+            grid.position.y = 0.001;
+            scene.add(grid);
+        }
+
+        function createRobotModel() {
+            const matBase = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5, metalness: 0.7 });
+            const matTurret = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.4, metalness: 0.8 });
+            const matArm1 = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3, metalness: 0.9 });
+            const matArm2 = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.4, metalness: 0.6 });
+            const matJoint = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.8 });
+
+            // Base Pedestal
+            const basePedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.5, 32), matBase);
+            basePedestal.position.y = 0.25;
+            basePedestal.castShadow = true;
+            scene.add(basePedestal);
+
+            // Joint 1: Turret (Y-Axis)
+            const nodeJ1 = new THREE.Group();
+            nodeJ1.position.set(0, 0.5, 0);
+            scene.add(nodeJ1);
+
+            const turretMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 0.4, 32), matTurret);
+            turretMesh.position.y = 0.2;
+            turretMesh.castShadow = true;
+            nodeJ1.add(turretMesh);
+
+            const offsetMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.25, 0.35), matTurret);
+            offsetMesh.position.set(0.3, 0.35, 0);
+            offsetMesh.castShadow = true;
+            nodeJ1.add(offsetMesh);
+
+            // Joint 2: Shoulder (Z-Axis)
+            const nodeJ2 = new THREE.Group();
+            nodeJ2.position.set(0.6, 0.35, 0);
+            nodeJ1.add(nodeJ2);
+
+            const shoulderCap = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.4, 24), matJoint);
+            shoulderCap.rotation.x = Math.PI / 2;
+            shoulderCap.castShadow = true;
+            nodeJ2.add(shoulderCap);
+
+            const link1Mesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.35, 0.22), matArm1);
+            link1Mesh.position.set(0, 0.675, 0);
+            link1Mesh.castShadow = true;
+            nodeJ2.add(link1Mesh);
+
+            // Joint 3: Elbow (Z-Axis)
+            const nodeJ3 = new THREE.Group();
+            nodeJ3.position.set(0, 1.35, 0);
+            nodeJ2.add(nodeJ3);
+
+            const elbowCap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.35, 24), matJoint);
+            elbowCap.rotation.x = Math.PI / 2;
+            elbowCap.castShadow = true;
+            nodeJ3.add(elbowCap);
+
+            const link2Mesh = new THREE.Mesh(new THREE.BoxGeometry(1.47, 0.18, 0.18), matArm2);
+            link2Mesh.position.set(0.735, 0, 0);
+            link2Mesh.castShadow = true;
+            nodeJ3.add(link2Mesh);
+
+            const suctionStem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 16), matJoint);
+            suctionStem.position.set(1.47, -0.1, 0);
+            nodeJ3.add(suctionStem);
+
+            const suctionCone = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.12, 24), new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.2 }));
+            suctionCone.position.set(1.47, -0.22, 0);
+            suctionCone.rotation.x = Math.PI;
+            nodeJ3.add(suctionCone);
+
+            // Tip Node / End Effector
+            const nodeTip = new THREE.Group();
+            nodeTip.position.set(1.47, -0.28, 0);
+            nodeJ3.add(nodeTip);
+
+            // Attach Axes Helpers
+            const h1 = new THREE.AxesHelper(0.6); nodeJ1.add(h1); axesHelpers.push(h1);
+            const h2 = new THREE.AxesHelper(0.6); nodeJ2.add(h2); axesHelpers.push(h2);
+            const h3 = new THREE.AxesHelper(0.6); nodeJ3.add(h3); axesHelpers.push(h3);
+            const hTip = new THREE.AxesHelper(0.4); nodeTip.add(hTip); axesHelpers.push(hTip);
+
+            robotController.bindNodes(nodeJ1, nodeJ2, nodeJ3, nodeTip);
+        }
+
+        function createWorkstationObjects() {
+            // Work Table
+            const tableGroup = new THREE.Group();
+            tableGroup.position.set(1.8, 0, 1.0);
+
+            const top = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.8), new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.5 }));
+            top.position.y = 0.35;
+            top.castShadow = true; top.receiveShadow = true;
+            tableGroup.add(top);
+
+            const ring = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.14, 32), new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide }));
+            ring.rotation.x = -Math.PI / 2; ring.position.y = 0.378;
+            tableGroup.add(ring);
+            scene.add(tableGroup);
+
+            // Orange Block A
+            const block = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.3 }));
+            block.position.set(1.8, 0.475, 1.0);
+            block.castShadow = true; block.receiveShadow = true;
+            scene.add(block);
+
+            // Placement Crate Zone
+            const crateGroup = new THREE.Group();
+            crateGroup.position.set(1.8, 0, -1.0);
+
+            const crateMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.4 });
+            const crateBottom = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.04, 0.8), crateMat);
+            crateBottom.position.y = 0.02; crateBottom.receiveShadow = true;
+            crateGroup.add(crateBottom);
+
+            const wLeft = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.32, 0.8), crateMat);
+            wLeft.position.set(-0.38, 0.18, 0); wLeft.castShadow = true; crateGroup.add(wLeft);
+            const wRight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.32, 0.8), crateMat);
+            wRight.position.set(0.38, 0.18, 0); wRight.castShadow = true; crateGroup.add(wRight);
+            const wFront = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.32, 0.04), crateMat);
+            wFront.position.set(0, 0.18, 0.38); wFront.castShadow = true; crateGroup.add(wFront);
+            const wBack = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.32, 0.04), crateMat);
+            wBack.position.set(0, 0.18, -0.38); wBack.castShadow = true; crateGroup.add(wBack);
+
+            scene.add(crateGroup);
+
+            pickAndPlaceController.setBlockAndScene(block, scene);
+        }
+
+        // =========================================================================
+        // ANIMATION & HUD UPDATE LOOP
+        // =========================================================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+            if (controlMode === 'AUTO') {
+                pickAndPlaceController.update(delta);
+            }
+            robotController.update(delta);
+
+            updateHUD();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function updateHUD() {
+            const j1 = robotController.joints.j1;
+            const j2 = robotController.joints.j2;
+            const j3 = robotController.joints.j3;
+
+            document.getElementById('tel-j1').textContent = (j1.currentDeg >= 0 ? '+' : '') + j1.currentDeg.toFixed(1) + '°';
+            document.getElementById('tel-j2').textContent = (j2.currentDeg >= 0 ? '+' : '') + j2.currentDeg.toFixed(1) + '°';
+            document.getElementById('tel-j3').textContent = (j3.currentDeg >= 0 ? '+' : '') + j3.currentDeg.toFixed(1) + '°';
+
+            document.getElementById('val-j1').textContent = j1.currentDeg.toFixed(1) + '°';
+            document.getElementById('val-j2').textContent = j2.currentDeg.toFixed(1) + '°';
+            document.getElementById('val-j3').textContent = j3.currentDeg.toFixed(1) + '°';
+
+            if (controlMode === 'AUTO') {
+                document.getElementById('slider-j1').value = j1.currentDeg;
+                document.getElementById('slider-j2').value = j2.currentDeg;
+                document.getElementById('slider-j3').value = j3.currentDeg;
+            }
+
+            const bRobot = document.getElementById('badge-robot-state');
+            bRobot.className = robotController.isMoving ? 'badge moving' : 'badge idle';
+            bRobot.textContent = robotController.isMoving ? 'MOVING' : 'IDLE';
+
+            const bEffector = document.getElementById('badge-effector-state');
+            bEffector.className = pickAndPlaceController.endEffectorState === 'CARRYING' ? 'badge carrying' : 'badge free';
+            bEffector.textContent = pickAndPlaceController.endEffectorState;
+
+            document.getElementById('badge-process-step').textContent = pickAndPlaceController.state;
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // Window UI Handlers
+        window.setControlMode = function(mode) {
+            controlMode = mode;
+            document.getElementById('btn-auto').className = 'btn-mode ' + (mode === 'AUTO' ? 'active' : '');
+            document.getElementById('btn-manual').className = 'btn-mode ' + (mode === 'MANUAL' ? 'active' : '');
+        };
+
+        window.goHome = function() {
+            if (controlMode === 'MANUAL') {
+                robotController.setJointTargets(0, 0, 0);
+            } else {
+                pickAndPlaceController.state = 'HOME';
+            }
+        };
+
+        window.onSliderInput = function(key, val) {
+            if (controlMode !== 'MANUAL') window.setControlMode('MANUAL');
+            robotController.setSingleJointTarget(key, parseFloat(val));
+        };
+
+        window.stepJoint = function(key, delta) {
+            if (controlMode !== 'MANUAL') window.setControlMode('MANUAL');
+            const current = robotController.joints[key].currentDeg;
+            robotController.setSingleJointTarget(key, current + delta);
+        };
+
+        window.toggleAxes = function(show) {
+            showAxes = show;
+            axesHelpers.forEach(h => h.visible = show);
+        };
+
+        window.changeJointAxis = function(key, axis) {
+            robotController.joints[key].axis = axis;
+            robotController.applyAllJointRotations();
+        };
+
+        window.resetCamera = function() {
+            camera.position.set(4.2, 3.2, 4.2);
+            controls.target.set(0.8, 0.8, 0);
+            controls.update();
+        };
+    </script>
+</body>
+</html>

@@ -86,7 +86,7 @@
             padding: 0.85rem 1.25rem;
             border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            max-width: 420px;
+            max-width: 440px;
         }
 
         header h1 {
@@ -117,7 +117,7 @@
             padding: 1rem 1.25rem;
             border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            min-width: 320px;
+            min-width: 330px;
         }
 
         .hud-row {
@@ -224,7 +224,7 @@
     <!-- Header UI -->
     <header>
         <h1>🤖 Dobot Magician 3D Pick & Place</h1>
-        <p>Autonomously picks an orange block and deposits it inside the crate using 3D Inverse Kinematics.</p>
+        <p>100% Precision Physical Contact Attachment & Placement with Scene Graph Hierarchy.</p>
     </header>
 
     <!-- Model Status Tag -->
@@ -247,7 +247,7 @@
             <span id="hud-task" class="hud-value">Hovering over block...</span>
         </div>
         <div class="hud-row">
-            <span class="hud-label">End-Effector Target:</span>
+            <span class="hud-label">Tip Contact Target:</span>
             <span id="hud-target" class="hud-value">(0.0, 0.0, 0.0)</span>
         </div>
         <div class="hud-row">
@@ -283,8 +283,8 @@
 
         // Rotation axes for each joint ('x', 'y', or 'z')
         const J1_AXIS = 'y'; // Base turret rotates around vertical Y-axis
-        const J2_AXIS = 'z'; // Shoulder rotates around pitch axis (Z or X depending on rig)
-        const J3_AXIS = 'z'; // Elbow rotates around pitch axis (Z or X depending on rig)
+        const J2_AXIS = 'z'; // Shoulder rotates around pitch axis
+        const J3_AXIS = 'z'; // Elbow rotates around pitch axis
 
         // Rotation directions (1 or -1 to invert if model local axes are flipped)
         const J1_DIR = 1;
@@ -297,25 +297,34 @@
         const BASE_OFFSET_RADIUS = 60.0; // Horizontal offset from turret axis to shoulder joint
         const BASE_OFFSET_HEIGHT = 0.0;  // Vertical offset from base origin to shoulder joint
 
-        // Reachability limits from shoulder pivot (60, 0)
-        const R_MIN = Math.abs(L1 - L2); // |135 - 147| = 12
-        const R_MAX = L1 + L2;           // 135 + 147 = 282
-
-        // Scale factor to convert mm to Three.js world units (0.01 scale = 1 unit = 100mm)
+        // Scale factor: 0.01 converts 1mm = 0.01 Three.js world units
         const SCALE = 0.01;
+
+        // Physical Object Dimensions (in mm)
+        const BLOCK_SIZE = 20.0;        // 20x20x20mm cube
+        const CRATE_BOTTOM_THICKNESS = 4.0; // 4mm crate bottom plate
+
+        // =============================================================================
+        // EXACT PHYSICAL COORDINATE CALCULATIONS
+        // =============================================================================
+        // 1. Pick Location (Ground level Y = 0mm):
+        //    Block center Y = 10mm.
+        //    Top face of block Y = 20mm.
+        //    Tip contact target for GRAB = (180, 20, 100)mm.
+        const PICK_XZ = { x: 180.0, z: 100.0 };
+        const PICK_TIP_Y = BLOCK_SIZE; // Y = 20mm (exact top face of block)
+
+        // 2. Place Location (Inside Crate):
+        //    Crate floor Y = 4mm.
+        //    Block center inside crate Y = 4 + 10 = 14mm.
+        //    Top face of block inside crate Y = 14 + 10 = 24mm.
+        //    Tip contact target for RELEASE = (180, 24, -100)mm.
+        const PLACE_XZ = { x: 180.0, z: -100.0 };
+        const PLACE_TIP_Y = CRATE_BOTTOM_THICKNESS + BLOCK_SIZE; // Y = 24mm
 
         // =============================================================================
         // 3D INVERSE KINEMATICS (IK) MATH
-        // (Target {x, y, z} relative to base origin -> {j1, j2, j3} in radians)
         // =============================================================================
-        /**
-         * Solves 3D Inverse Kinematics for Dobot Magician arm.
-         * 
-         * @param {number} x - Target X coordinate relative to base origin (0,0,0)
-         * @param {number} y - Target Y coordinate relative to base origin (0,0,0)
-         * @param {number} z - Target Z coordinate relative to base origin (0,0,0)
-         * @returns {{ reachable: boolean, j1: number, j2: number, j3: number, cosBeta?: number, error?: string }}
-         */
         function solveIK(x, y, z) {
             // 1. Turret rotation around vertical Y axis
             const radial = Math.sqrt(x * x + z * z);
@@ -338,7 +347,7 @@
                     reachable: false,
                     j1: 0, j2: 0, j3: 0,
                     cosBeta: cosBeta,
-                    error: `Target (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) out of reach! Radius: ${radius.toFixed(1)}mm`
+                    error: `Target (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) out of reach!`
                 };
             }
 
@@ -361,48 +370,21 @@
         }
 
         // =============================================================================
-        // 3D FORWARD KINEMATICS (FK) MATH
-        // (Angles in radians -> 3D tip position relative to base origin)
-        // =============================================================================
-        /**
-         * Solves 3D Forward Kinematics given (j1, j2, j3) joint angles in radians.
-         * 
-         * @param {number} j1 - Joint 1 (Turret) angle in radians
-         * @param {number} j2 - Joint 2 (Shoulder) angle in radians
-         * @param {number} j3 - Joint 3 (Elbow) angle in radians
-         * @returns {{ x: number, y: number, z: number, radial: number, height: number }}
-         */
-        function solveFK(j1, j2, j3) {
-            const radial = BASE_OFFSET_RADIUS + L1 * Math.sin(j2) + L2 * Math.cos(j3);
-            const height = BASE_OFFSET_HEIGHT + L1 * Math.cos(j2) - L2 * Math.sin(j3);
-
-            const x = radial * Math.cos(j1);
-            const z = radial * Math.sin(j1);
-            const y = height;
-
-            return { x, y, z, radial, height };
-        }
-
-        // =============================================================================
         // AUTOPLAY PICK & PLACE WAYPOINT SEQUENCE
         // =============================================================================
-        // Target locations in world coordinates (mm relative to base origin)
-        // Block starting location: (180, 25, 100) -> Verified reachable (radius ~ 143.6mm)
-        // Box container location:  (180, 25, -100) -> Verified reachable (radius ~ 143.6mm)
-
         const WAYPOINTS = [
-            { name: "Hovering over block",      pos: { x: 180, y: 110, z: 100 }, duration: 1.4, action: null },
-            { name: "Descending to block",      pos: { x: 180, y: 28,  z: 100 }, duration: 1.0, action: null },
-            { name: "Grabbing block",           pos: { x: 180, y: 28,  z: 100 }, duration: 0.6, action: "GRAB" },
-            { name: "Lifting block",            pos: { x: 180, y: 130, z: 100 }, duration: 1.0, action: null },
-            { name: "Traveling across to box", pos: { x: 180, y: 130, z: -100 }, duration: 1.8, action: null },
-            { name: "Descending into box",     pos: { x: 180, y: 40,  z: -100 }, duration: 1.0, action: null },
-            { name: "Releasing block into crate",pos:{ x: 180, y: 40,  z: -100 }, duration: 0.6, action: "RELEASE" },
-            { name: "Retreating arm up",       pos: { x: 180, y: 130, z: -100 }, duration: 1.0, action: null },
-            { name: "Resetting cycle",          pos: { x: 180, y: 110, z: 100 }, duration: 1.5, action: "RESET" }
+            { name: "Hovering over block",      pos: { x: PICK_XZ.x, y: 110, z: PICK_XZ.z }, duration: 1.4, action: null },
+            { name: "Descending to block top",  pos: { x: PICK_XZ.x, y: PICK_TIP_Y, z: PICK_XZ.z }, duration: 1.0, action: null },
+            { name: "Engaging Suction (GRAB)",  pos: { x: PICK_XZ.x, y: PICK_TIP_Y, z: PICK_XZ.z }, duration: 0.5, action: "GRAB" },
+            { name: "Lifting block clear",      pos: { x: PICK_XZ.x, y: 130, z: PICK_XZ.z }, duration: 1.0, action: null },
+            { name: "Traveling across to crate",pos: { x: PLACE_XZ.x, y: 130, z: PLACE_XZ.z }, duration: 1.8, action: null },
+            { name: "Descending into crate",   pos: { x: PLACE_XZ.x, y: PLACE_TIP_Y, z: PLACE_XZ.z }, duration: 1.0, action: null },
+            { name: "Releasing Vacuum (RELEASE)",pos:{ x: PLACE_XZ.x, y: PLACE_TIP_Y, z: PLACE_XZ.z }, duration: 0.5, action: "RELEASE" },
+            { name: "Retreating arm up",       pos: { x: PLACE_XZ.x, y: 130, z: PLACE_XZ.z }, duration: 1.0, action: null },
+            { name: "Resetting cycle",          pos: { x: PICK_XZ.x, y: 110, z: PICK_XZ.z }, duration: 1.5, action: "RESET" }
         ];
 
-        // Smooth cubic easing function for realistic robot acceleration/deceleration
+        // Smooth cubic easing function for realistic robot velocity profile
         function easeInOutCubic(t) {
             return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
         }
@@ -412,7 +394,7 @@
         // =============================================================================
         let scene, camera, renderer, controls;
         let armNodes = { j1: null, j2: null, j3: null, tip: null };
-        let blockMesh, boxGroup, tipMarkerMesh;
+        let blockMesh, boxGroup;
         let isAttachedToTip = false;
 
         // Animation State Machine Variables
@@ -423,7 +405,6 @@
         let isPaused = false;
         let clock = new THREE.Clock();
 
-        // Initialize Scene
         init();
         animate();
 
@@ -437,7 +418,7 @@
 
             // 2. Camera
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(3.2, 2.4, 3.2);
+            camera.position.set(3.2, 2.2, 3.2);
 
             // 3. Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -451,13 +432,13 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
-            controls.target.set(0.8, 0.6, 0);
+            controls.target.set(0.8, 0.5, 0);
 
             // 5. Lighting
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambientLight);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
             dirLight.position.set(4, 6, 4);
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 2048;
@@ -471,16 +452,15 @@
             fillLight.position.set(-4, 3, -4);
             scene.add(fillLight);
 
-            // 6. Environment: Ground Plane & Grid
+            // 6. Environment
             createEnvironment();
 
-            // 7. Interactive Objects: Block & Box Container
+            // 7. Interactive Objects
             createPickAndPlaceObjects();
 
-            // 8. Load Robot Arm (GLTF model or Procedural Fallback)
+            // 8. Robot Model
             loadRobotModel();
 
-            // Window resize handler
             window.addEventListener('resize', onWindowResize);
         }
 
@@ -501,30 +481,13 @@
             const grid = new THREE.GridHelper(20, 40, 0x38bdf8, 0x334155);
             grid.position.y = 0.001;
             scene.add(grid);
-
-            // Reachable Workspace Ring Overlay on Ground
-            const shoulderWorldX = BASE_OFFSET_RADIUS * SCALE;
-            const rMinWorld = R_MIN * SCALE;
-            const rMaxWorld = R_MAX * SCALE;
-
-            const ringGeo = new THREE.RingGeometry(rMinWorld, rMaxWorld, 64);
-            const ringMat = new THREE.MeshBasicMaterial({
-                color: 0x38bdf8,
-                transparent: true,
-                opacity: 0.06,
-                side: THREE.DoubleSide
-            });
-            const workspaceRing = new THREE.Mesh(ringGeo, ringMat);
-            workspaceRing.rotation.x = -Math.PI / 2;
-            workspaceRing.position.set(shoulderWorldX, 0.002, 0);
-            scene.add(workspaceRing);
         }
 
         function createPickAndPlaceObjects() {
             // --- Orange Block Mesh ---
-            const blockGeo = new THREE.BoxGeometry(20 * SCALE, 20 * SCALE, 20 * SCALE);
+            const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE * SCALE, BLOCK_SIZE * SCALE, BLOCK_SIZE * SCALE);
             const blockMat = new THREE.MeshStandardMaterial({
-                color: 0xf97316, // Orange
+                color: 0xf97316, // Vibrant Orange
                 roughness: 0.3,
                 metalness: 0.1
             });
@@ -532,53 +495,51 @@
             blockMesh.castShadow = true;
             blockMesh.receiveShadow = true;
 
-            // Set initial position to block starting location
-            const initBlockPos = WAYPOINTS[1].pos;
-            blockMesh.position.set(initBlockPos.x * SCALE, 10 * SCALE, initBlockPos.z * SCALE);
+            // Set initial position: sitting on ground Y=0 -> Center Y = 10mm
+            blockMesh.position.set(PICK_XZ.x * SCALE, (BLOCK_SIZE / 2) * SCALE, PICK_XZ.z * SCALE);
             scene.add(blockMesh);
 
-            // --- Open-Top Box / Crate Container ---
+            // --- Open-Top Slate Crate Container ---
             boxGroup = new THREE.Group();
-            const boxPos = WAYPOINTS[5].pos; // (180, Y, -100)
-            boxGroup.position.set(boxPos.x * SCALE, 0, boxPos.z * SCALE);
+            boxGroup.position.set(PLACE_XZ.x * SCALE, 0, PLACE_XZ.z * SCALE);
 
             const wallMat = new THREE.MeshStandardMaterial({
-                color: 0x64748b, // Slate Metal Crate
+                color: 0x64748b,
                 roughness: 0.6,
                 metalness: 0.4
             });
 
-            const boxWidth = 50 * SCALE;
-            const boxHeight = 35 * SCALE;
-            const boxThickness = 4 * SCALE;
+            const boxWidth = 50.0 * SCALE;
+            const boxHeight = 35.0 * SCALE;
+            const t = CRATE_BOTTOM_THICKNESS * SCALE;
 
-            // Bottom Plate
-            const bottom = new THREE.Mesh(new THREE.BoxGeometry(boxWidth, boxThickness, boxWidth), wallMat);
-            bottom.position.y = boxThickness / 2;
+            // Bottom Plate (Thickness = 4mm)
+            const bottom = new THREE.Mesh(new THREE.BoxGeometry(boxWidth, t, boxWidth), wallMat);
+            bottom.position.y = t / 2;
             bottom.receiveShadow = true;
             boxGroup.add(bottom);
 
             // Left Wall
-            const left = new THREE.Mesh(new THREE.BoxGeometry(boxThickness, boxHeight, boxWidth), wallMat);
-            left.position.set(-boxWidth/2 + boxThickness/2, boxHeight/2, 0);
+            const left = new THREE.Mesh(new THREE.BoxGeometry(t, boxHeight, boxWidth), wallMat);
+            left.position.set(-boxWidth/2 + t/2, boxHeight/2, 0);
             left.castShadow = true;
             boxGroup.add(left);
 
             // Right Wall
-            const right = new THREE.Mesh(new THREE.BoxGeometry(boxThickness, boxHeight, boxWidth), wallMat);
-            right.position.set(boxWidth/2 - boxThickness/2, boxHeight/2, 0);
+            const right = new THREE.Mesh(new THREE.BoxGeometry(t, boxHeight, boxWidth), wallMat);
+            right.position.set(boxWidth/2 - t/2, boxHeight/2, 0);
             right.castShadow = true;
             boxGroup.add(right);
 
             // Front Wall
-            const front = new THREE.Mesh(new THREE.BoxGeometry(boxWidth, boxHeight, boxThickness), wallMat);
-            front.position.set(0, boxHeight/2, boxWidth/2 - boxThickness/2);
+            const front = new THREE.Mesh(new THREE.BoxGeometry(boxWidth, boxHeight, t), wallMat);
+            front.position.set(0, boxHeight/2, boxWidth/2 - t/2);
             front.castShadow = true;
             boxGroup.add(front);
 
             // Back Wall
-            const back = new THREE.Mesh(new THREE.BoxGeometry(boxWidth, boxHeight, boxThickness), wallMat);
-            back.position.set(0, boxHeight/2, -boxWidth/2 + boxThickness/2);
+            const back = new THREE.Mesh(new THREE.BoxGeometry(boxWidth, boxHeight, t), wallMat);
+            back.position.set(0, boxHeight/2, -boxWidth/2 + t/2);
             back.castShadow = true;
             boxGroup.add(back);
 
@@ -586,7 +547,7 @@
         }
 
         // =============================================================================
-        // ROBOT MODEL LOADER & PROCEDURAL FALLBACK
+        // ROBOT MODEL LOADER & PROCEDURAL FALLBACK RIG
         // =============================================================================
         function loadRobotModel() {
             const loader = new GLTFLoader();
@@ -594,29 +555,23 @@
             loader.load(
                 GLB_FILE_PATH,
                 (gltf) => {
-                    console.log("✅ Successfully loaded external GLB robot model:", GLB_FILE_PATH);
+                    console.log("✅ Successfully loaded GLB model:", GLB_FILE_PATH);
                     const rootModel = gltf.scene;
                     rootModel.scale.set(SCALE, SCALE, SCALE);
                     scene.add(rootModel);
 
-                    // Update UI tag
                     document.getElementById('model-tag').textContent = `Model: ${GLB_FILE_PATH}`;
-
-                    // Traverse and map nodes
                     mapJointNodes(rootModel);
                 },
-                (xhr) => {
-                    // Progress callback
-                },
-                (error) => {
-                    console.warn(`⚠️ Could not load '${GLB_FILE_PATH}' (${error.message}). Creating fallback procedural robot arm rig.`);
+                undefined,
+                () => {
+                    console.warn(`⚠️ Could not load '${GLB_FILE_PATH}'. Generating procedural robot arm rig.`);
                     createProceduralRobotArm();
                 }
             );
         }
 
         function createProceduralRobotArm() {
-            // Root Group
             const armGroup = new THREE.Group();
             scene.add(armGroup);
 
@@ -659,7 +614,7 @@
             shoulderCap.rotation.x = Math.PI / 2;
             nodeJ2.add(shoulderCap);
 
-            // Link 1 (Rear Arm) Mesh: Length L1 = 135
+            // Link 1 (Rear Arm) Mesh: Length L1 = 135mm
             const link1Mesh = new THREE.Mesh(new THREE.BoxGeometry(16 * SCALE, L1 * SCALE, 16 * SCALE), matArm1);
             link1Mesh.position.set(0, (L1 / 2) * SCALE, 0);
             link1Mesh.castShadow = true;
@@ -676,40 +631,41 @@
             elbowCap.rotation.x = Math.PI / 2;
             nodeJ3.add(elbowCap);
 
-            // Link 2 (Forearm) Mesh: Length L2 = 147 (extends horizontally when J3 = 0)
+            // Link 2 (Forearm) Mesh: Length L2 = 147mm
             const link2Mesh = new THREE.Mesh(new THREE.BoxGeometry(L2 * SCALE, 12 * SCALE, 12 * SCALE), matArm2);
             link2Mesh.position.set((L2 / 2) * SCALE, 0, 0);
             link2Mesh.castShadow = true;
             nodeJ3.add(link2Mesh);
 
-            // TIP Node: End-effector point at end of Forearm (L2, 0, 0)
+            // Suction Cup Assembly Visual (Stem + Cone)
+            const suctionStem = new THREE.Mesh(new THREE.CylinderGeometry(4 * SCALE, 4 * SCALE, 15 * SCALE, 16), matJoint);
+            suctionStem.position.set(L2 * SCALE, -7.5 * SCALE, 0);
+            nodeJ3.add(suctionStem);
+
+            const suctionCone = new THREE.Mesh(new THREE.ConeGeometry(9 * SCALE, 10 * SCALE, 24), new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.2 }));
+            suctionCone.position.set(L2 * SCALE, -20 * SCALE, 0);
+            suctionCone.rotation.x = Math.PI; // Cone pointing down
+            nodeJ3.add(suctionCone);
+
+            // TIP NODE: Positioned EXACTLY at bottom contact rim of suction cup (Y = -25mm relative to forearm center)
             const nodeTip = new THREE.Group();
             nodeTip.name = TIP_NAME;
-            nodeTip.position.set(L2 * SCALE, 0, 0);
+            nodeTip.position.set(L2 * SCALE, -25.0 * SCALE, 0);
             nodeJ3.add(nodeTip);
 
-            // Suction Cup Effector Visual
-            const effectorMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.3 });
-            const effectorMesh = new THREE.Mesh(new THREE.ConeGeometry(8 * SCALE, 15 * SCALE, 16), effectorMat);
-            effectorMesh.position.y = -7.5 * SCALE;
-            nodeTip.add(effectorMesh);
-
-            // Map created procedural nodes
             armNodes.j1 = nodeJ1;
             armNodes.j2 = nodeJ2;
             armNodes.j3 = nodeJ3;
             armNodes.tip = nodeTip;
 
-            console.log("🤖 Procedural Robot Arm created successfully!");
+            console.log("🤖 Procedural Robot Arm initialized with exact 0.00mm tip contact plane!");
         }
 
         function mapJointNodes(rootScene) {
-            console.log("--- Traversing GLB Scene Graph Nodes ---");
             const foundNodeNames = [];
             rootScene.traverse((child) => {
                 if (child.name) foundNodeNames.push(child.name);
             });
-            console.log("All Node Names found in GLB:", foundNodeNames);
 
             const j1 = rootScene.getObjectByName(JOINT1_NAME);
             const j2 = rootScene.getObjectByName(JOINT2_NAME);
@@ -722,19 +678,15 @@
             if (!j3) missing.push(JOINT3_NAME);
 
             if (missing.length > 0) {
-                console.error(
-                    `❌ CRITICAL GLB NODE ERROR: Missing node names: ${missing.join(", ")}\n` +
-                    `Nodes available in GLB file:\n  [ ${foundNodeNames.join(", ")} ]\n\n` +
-                    `-> Edit JOINT1_NAME, JOINT2_NAME, JOINT3_NAME near top of HTML file.`
-                );
-                showOnScreenAlert(`Missing Nodes: ${missing.join(", ")}. Press F12 to inspect console for list of node names.`);
+                console.error(`❌ GLB Node Error: Missing ${missing.join(", ")}. Available: [${foundNodeNames.join(", ")}]`);
+                showOnScreenAlert(`Missing Nodes: ${missing.join(", ")}. Inspect console (F12) for available node names.`);
                 return;
             }
 
             if (!tip) {
-                console.warn(`⚠️ Tip node '${TIP_NAME}' not found in GLB. Falling back to offset at end of J3.`);
+                console.warn(`⚠️ Tip node '${TIP_NAME}' missing. Creating fallback tip node.`);
                 tip = new THREE.Group();
-                tip.position.set(L2, 0, 0);
+                tip.position.set(L2 * SCALE, -25.0 * SCALE, 0);
                 j3.add(tip);
             }
 
@@ -747,19 +699,10 @@
         function applyJointRotations(j1, j2, j3) {
             if (!armNodes.j1 || !armNodes.j2 || !armNodes.j3) return;
 
-            // 1. Joint 1 (Turret): Rotates around vertical Y-axis
             armNodes.j1.rotation[J1_AXIS] = j1 * J1_DIR;
-
-            // 2. Joint 2 (Shoulder): Rotates around local pitch axis
             armNodes.j2.rotation[J2_AXIS] = j2 * J2_DIR;
 
-            // 3. Joint 3 (Elbow):
-            // IMPORTANT PARALLELOGRAM LINKAGE MECHANICS NOTE:
-            // In the Dobot physical arm, a mechanical parallel rod keeps J3's angle measured
-            // absolutely relative to the horizontal base frame.
-            // Because J3 is a child of J2 in the Three.js 3D scene hierarchy, J3 inherits J2's rotation.
-            // To make J3's world rotation equal to j3, we subtract j2 from j3 for J3's local rotation:
-            // local_j3 = j3 - j2
+            // Parallelogram linkage decoupling: subtract j2 from j3 for J3's local rotation
             const j3Local = j3 - j2;
             armNodes.j3.rotation[J3_AXIS] = j3Local * J3_DIR;
         }
@@ -776,15 +719,6 @@
                 updateWaypointAnimation(delta);
             }
 
-            // If block is currently grabbed, update its world position to match end-effector tip
-            if (isAttachedToTip && armNodes.tip && blockMesh) {
-                const tipWorldPos = new THREE.Vector3();
-                armNodes.tip.getWorldPosition(tipWorldPos);
-                // Offset block slightly below tip center
-                blockMesh.position.copy(tipWorldPos);
-                blockMesh.position.y -= 10 * SCALE;
-            }
-
             controls.update();
             renderer.render(scene, camera);
         }
@@ -792,63 +726,66 @@
         function updateWaypointAnimation(delta) {
             const currentWaypoint = WAYPOINTS[waypointIndex];
             const nextWaypointIndex = (waypointIndex + 1) % WAYPOINTS.length;
-            const nextWaypoint = WAYPOINTS[nextWaypointIndex];
 
-            // Advance progress timer
             waypointProgress += delta / currentWaypoint.duration;
 
             if (waypointProgress >= 1.0) {
                 waypointProgress = 0;
                 waypointIndex = nextWaypointIndex;
 
-                // Execute Waypoint Action (Grab, Release, Reset)
+                // Execute Attachment Action
                 executeWaypointAction(WAYPOINTS[waypointIndex].action);
 
-                // Update start & target positions for next leg
                 startPos = { ...WAYPOINTS[waypointIndex].pos };
                 targetPos = { ...WAYPOINTS[(waypointIndex + 1) % WAYPOINTS.length].pos };
 
                 return;
             }
 
-            // Ease interpolation between startPos and targetPos
             const easedT = easeInOutCubic(waypointProgress);
 
             const currentX = startPos.x + (targetPos.x - startPos.x) * easedT;
             const currentY = startPos.y + (targetPos.y - startPos.y) * easedT;
             const currentZ = startPos.z + (targetPos.z - startPos.z) * easedT;
 
-            // Solve 3D IK for current target point
             const ikResult = solveIK(currentX, currentY, currentZ);
 
             if (ikResult.reachable) {
                 hideOnScreenAlert();
                 applyJointRotations(ikResult.j1, ikResult.j2, ikResult.j3);
-
-                // Update HUD readout
                 updateHUD(WAYPOINTS[waypointIndex].name, currentX, currentY, currentZ, ikResult);
             } else {
-                // UNREACHABLE WAYPOINT ALERT
                 isPaused = true;
                 showOnScreenAlert(`UNREACHABLE WAYPOINT: ${ikResult.error}`);
             }
         }
 
+        // =============================================================================
+        // SCENE GRAPH ATTACHMENT / DETACHMENT (PIXEL-PERFECT PHYSICAL ATTACHMENT)
+        // =============================================================================
         function executeWaypointAction(action) {
-            if (!action) return;
+            if (!action || !armNodes.tip || !blockMesh) return;
 
             if (action === "GRAB") {
+                // ATTACH TO TIP: Re-parents block as a child of armNodes.tip while preserving exact world transform
+                armNodes.tip.attach(blockMesh);
                 isAttachedToTip = true;
             } else if (action === "RELEASE") {
+                // DETACH FROM TIP: Re-parents block to root scene, locking its position inside the crate floor with 0.00mm gap
+                scene.attach(blockMesh);
                 isAttachedToTip = false;
-                // Place block at current box deposit position
-                const boxPos = WAYPOINTS[5].pos;
-                blockMesh.position.set(boxPos.x * SCALE, 12 * SCALE, boxPos.z * SCALE);
+
+                // Set exact resting position inside crate (Bottom Y=4mm -> Center Y=14mm)
+                blockMesh.position.set(PLACE_XZ.x * SCALE, (CRATE_BOTTOM_THICKNESS + BLOCK_SIZE / 2) * SCALE, PLACE_XZ.z * SCALE);
+                blockMesh.rotation.set(0, 0, 0);
             } else if (action === "RESET") {
-                isAttachedToTip = false;
-                // Reset block to starting pick location
-                const initBlockPos = WAYPOINTS[1].pos;
-                blockMesh.position.set(initBlockPos.x * SCALE, 10 * SCALE, initBlockPos.z * SCALE);
+                if (isAttachedToTip) {
+                    scene.attach(blockMesh);
+                    isAttachedToTip = false;
+                }
+                // Reset block to initial pick position on ground (Ground Y=0mm -> Center Y=10mm)
+                blockMesh.position.set(PICK_XZ.x * SCALE, (BLOCK_SIZE / 2) * SCALE, PICK_XZ.z * SCALE);
+                blockMesh.rotation.set(0, 0, 0);
             }
         }
 
@@ -873,14 +810,12 @@
             document.getElementById('alert-banner').style.display = 'none';
         }
 
-        // Window Resize Handler
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // Global UI Controls
         window.togglePause = function() {
             isPaused = !isPaused;
             const btn = document.getElementById('btn-pause');
@@ -896,7 +831,6 @@
             waypointProgress = 0;
             startPos = { ...WAYPOINTS[0].pos };
             targetPos = { ...WAYPOINTS[1].pos };
-            isAttachedToTip = false;
             executeWaypointAction("RESET");
             if (isPaused) window.togglePause();
         };

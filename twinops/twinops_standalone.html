@@ -602,7 +602,6 @@
                 const rad = THREE.MathUtils.degToRad(j.currentDeg) * j.dir;
                 const axisVec = this.getAxisVector(j.axis);
 
-                // CRITICAL LOCAL ROTATION MULTIPLICATION: newLocal = initialLocal * QuaternionFromAxisAngle(localAxis, angle)
                 const qRot = new THREE.Quaternion().setFromAxisAngle(axisVec, rad);
                 j.node.quaternion.copy(j.initialQ).multiply(qRot);
             }
@@ -621,7 +620,7 @@
         }
 
         // =========================================================================
-        // PICK AND PLACE CONTROLLER CLASS
+        // PICK AND PLACE CONTROLLER CLASS (DYNAMIC DEDICATED IK FOR 100% ALIGNMENT)
         // =========================================================================
         class PickAndPlaceController {
             constructor(robotController) {
@@ -635,19 +634,80 @@
 
                 this.poses = {
                     home: { j1: 0, j2: 0, j3: 0 },
-                    pickupApproach: { j1: 29, j2: 24, j3: 42 },
-                    pickup: { j1: 29, j2: 44, j3: 56 },
-                    lift: { j1: 29, j2: 15, j3: 25 },
-                    placeApproach: { j1: -29, j2: 15, j3: 25 },
-                    place: { j1: -29, j2: 44, j3: 56 },
-                    retract: { j1: -29, j2: 15, j3: 25 }
+                    pickupApproach: { j1: 0, j2: 0, j3: 0 },
+                    pickup: { j1: 0, j2: 0, j3: 0 },
+                    lift: { j1: 0, j2: 0, j3: 0 },
+                    placeApproach: { j1: 0, j2: 0, j3: 0 },
+                    place: { j1: 0, j2: 0, j3: 0 },
+                    retract: { j1: 0, j2: 0, j3: 0 }
                 };
             }
 
             setBlockAndScene(block, scene) {
                 this.blockMesh = block;
                 this.scene = scene;
-                if (block) this.initialBlockPos.copy(block.position);
+                if (block) {
+                    this.initialBlockPos.copy(block.position);
+                    this.calculateExactIKPoses();
+                }
+            }
+
+            calculateExactIKPoses() {
+                if (!this.blockMesh) return;
+
+                const blockX = this.initialBlockPos.x; // 1.8
+                const blockZ = this.initialBlockPos.z; // 1.0
+                const pickupTipY = 0.375 + 0.2; // 0.575m (exact top surface of block)
+
+                const crateX = 1.8;
+                const crateZ = -1.0;
+                const placeTipY = 0.04 + 0.2; // 0.24m (exact top surface of block in crate)
+
+                const pickIK = this.solveRobotIK(blockX, pickupTipY, blockZ);
+                const pickAppIK = this.solveRobotIK(blockX, pickupTipY + 0.3, blockZ);
+                const liftIK = this.solveRobotIK(blockX, pickupTipY + 0.4, blockZ);
+
+                const placeIK = this.solveRobotIK(crateX, placeTipY, crateZ);
+                const placeAppIK = this.solveRobotIK(crateX, placeTipY + 0.3, crateZ);
+                const retractIK = this.solveRobotIK(crateX, placeTipY + 0.4, crateZ);
+
+                this.poses.pickupApproach = { j1: pickAppIK.j1Deg, j2: pickAppIK.j2Deg, j3: pickAppIK.j3Deg };
+                this.poses.pickup = { j1: pickIK.j1Deg, j2: pickIK.j2Deg, j3: pickIK.j3Deg };
+                this.poses.lift = { j1: liftIK.j1Deg, j2: liftIK.j2Deg, j3: liftIK.j3Deg };
+
+                this.poses.placeApproach = { j1: placeAppIK.j1Deg, j2: placeAppIK.j2Deg, j3: placeAppIK.j3Deg };
+                this.poses.place = { j1: placeIK.j1Deg, j2: placeIK.j2Deg, j3: placeIK.j3Deg };
+                this.poses.retract = { j1: retractIK.j1Deg, j2: retractIK.j2Deg, j3: retractIK.j3Deg };
+            }
+
+            solveRobotIK(targetX, targetY, targetZ) {
+                const j1Rad = Math.atan2(targetZ, targetX);
+                const radial = Math.sqrt(targetX * targetX + targetZ * targetZ);
+
+                const dr = radial - 0.6;
+                const dz = targetY - (0.85 - 0.28);
+
+                const L1 = 1.35;
+                const L2 = 1.47;
+
+                const radiusSq = dr * dr + dz * dz;
+                const radius = Math.sqrt(radiusSq);
+                const gamma = Math.atan2(dz, dr);
+
+                const cosBeta = (radiusSq - L1 * L1 - L2 * L2) / (-2.0 * L1 * L2);
+                const clampedCosBeta = THREE.MathUtils.clamp(cosBeta, -1.0, 1.0);
+                const beta = Math.acos(clampedCosBeta);
+
+                const alpha = radius > 0 ? Math.asin(THREE.MathUtils.clamp((L2 * Math.sin(beta)) / radius, -1.0, 1.0)) : 0;
+
+                const j2Rad = (Math.PI / 2.0) - alpha - gamma;
+                const j3Rad = Math.PI - beta - alpha - gamma;
+
+                return {
+                    j1Deg: THREE.MathUtils.radToDeg(j1Rad),
+                    j2Deg: THREE.MathUtils.radToDeg(j2Rad),
+                    j3Deg: THREE.MathUtils.radToDeg(j3Rad)
+                };
             }
 
             update(delta) {
@@ -716,6 +776,8 @@
             detachBlock() {
                 if (this.blockMesh && this.scene) {
                     this.scene.attach(this.blockMesh);
+                    this.blockMesh.position.set(1.8, 0.14, -1.0);
+                    this.blockMesh.rotation.set(0, 0, 0);
                 }
             }
 
@@ -906,7 +968,7 @@
             tableGroup.add(ring);
             scene.add(tableGroup);
 
-            // Orange Block A
+            // Orange Block A (Sitting on top of table ring at 1.8, 0.475, 1.0)
             const block = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.3 }));
             block.position.set(1.8, 0.475, 1.0);
             block.castShadow = true; block.receiveShadow = true;
